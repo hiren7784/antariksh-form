@@ -120,8 +120,7 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
 .send p{margin:0}
 .warn{background:#FCEDEA;border:1px solid #EBB8B1;border-radius:12px;padding:12px 14px;display:grid;gap:6px}
 .after{background:#EAF5EE;border-radius:12px;padding:12px 14px}
-.after[hidden],.copybox[hidden]{display:none}
-.copybox textarea{font-size:13px;min-height:160px}
+.after[hidden]{display:none}
 .row2{display:flex;gap:10px;flex-wrap:wrap}
 
 /* buttons */
@@ -137,6 +136,19 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
 .nav .primary{flex:1}
 .nav [hidden]{display:none}
 
+.btn:disabled{opacity:.55;cursor:default}
+.btn[hidden]{display:none}
+.row2 .btn{flex:1 1 160px}
+.rep{width:700px;background:#fff;color:#1A1A1A;font-family:var(--font-body);font-size:13px;line-height:1.4}
+.rep-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;padding-bottom:10px;border-bottom:2px solid #D19B17;margin-bottom:14px}
+.rep-head img{height:58px;width:auto}
+.rep-title{font-family:var(--font-display);font-weight:700;font-size:20px;letter-spacing:.06em}
+.rep-sub{color:#717171;font-size:12px;margin-top:3px}
+.rep-sec{width:100%;border-collapse:collapse;margin:0 0 12px}
+.rep-sec th{background:#F5E9CC;text-align:left;padding:6px 8px;font-weight:700;letter-spacing:.06em;border:1px solid #A6A6A6;font-size:12px}
+.rep-sec td{border:1px solid #A6A6A6;padding:5px 8px;vertical-align:top;overflow-wrap:anywhere}
+.rep-sec td.k{background:#F2F2F2;width:38%;color:#333}
+.rep-note{color:#717171;font-size:10.5px;margin:14px 0 0;border-top:1px solid #D19B17;padding-top:6px}
 .foot{margin-top:28px;font-size:12px;color:var(--muted);text-align:center;line-height:1.6}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
 </style>
@@ -386,11 +398,13 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
       h += '<div class="warn"><p><b>Please add your name and mobile number first.</b><span class="gu" lang="gu">પહેલાં તમારું નામ અને મોબાઇલ નંબર લખો.</span></p><div><button type="button" class="btn ghost" data-go="1">Add name & number</button></div></div>';
     }
     h += '<div class="send">' +
-      '<a class="btn wa" id="wa" target="_blank" rel="noopener" href="' + (ready ? 'https://wa.me/' + WA_NUMBER + '?text=' + encodeURIComponent(buildMessage()) : '#') + '" aria-disabled="' + (!ready) + '">Send to Antariksh on WhatsApp<small lang="gu">WhatsApp પર Antariksh ને મોકલો</small></a>' +
-      '<p class="hint">WhatsApp will open with your answers typed in. Press Send there. · <span class="g">WhatsApp ખુલશે, ત્યાં ફક્ત Send દબાવો.</span></p>' +
-      '<div class="after" id="after" hidden><b>Did WhatsApp open?</b> Press Send there to share your answers. You can also send site photos or the builder plan in the same chat.<span class="gu" lang="gu">WhatsApp માં Send દબાવો. સાઇટના ફોટા કે બિલ્ડરનો પ્લાન પણ એ જ ચેટમાં મોકલી શકો.</span></div>' +
-      '<div class="row2"><button type="button" class="btn ghost" id="copy">Copy answers<small lang="gu">&nbsp;· જવાબ કોપી કરો</small></button></div>' +
-      '<div class="copybox" id="copybox" hidden><p class="hint">Select all and copy this text, then paste it in WhatsApp to ' + WA_SHOW + '. · <span class="g">આ લખાણ કોપી કરી ' + WA_SHOW + ' પર WhatsApp કરો.</span></p><textarea id="copytext" readonly></textarea></div>' +
+      '<button type="button" class="btn wa" id="sharepdf" disabled>Preparing PDF…<small lang="gu">PDF તૈયાર થાય છે…</small></button>' +
+      '<p class="hint" id="pdfhint"></p>' +
+      '<div class="after" id="after" hidden></div>' +
+      '<div class="row2">' +
+        '<a class="btn ghost stack" id="wa" target="_blank" rel="noopener" href="' + (ready ? 'https://wa.me/' + WA_NUMBER + '?text=' + encodeURIComponent(buildMessage()) : '#') + '" aria-disabled="' + (!ready) + '">Send as text message only<small lang="gu">ફક્ત મેસેજ મોકલો</small></a>' +
+        '<button type="button" class="btn ghost stack" id="dlpdf" disabled>Download PDF<small lang="gu">PDF ડાઉનલોડ કરો</small></button>' +
+      '</div>' +
       '<p class="hint">Our WhatsApp: ' + WA_SHOW + '</p>' +
     '</div>';
 
@@ -428,7 +442,7 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
 
   function render(scrollTop){
     if (view === 0) $view.innerHTML = welcomeHTML();
-    else if (view === LAST) $view.innerHTML = reviewHTML();
+    else if (view === LAST){ $view.innerHTML = reviewHTML(); preparePdf(); }
     else $view.innerHTML = stepHTML(view - 1);
     renderPills();
     $progress.style.width = (view / LAST * 100) + '%';
@@ -462,6 +476,165 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
     renderPills();
   }
 
+  /* ---------- PDF of the answers (made in the browser, shared to WhatsApp) ---------- */
+  var PDF_LIB = 'js/html2pdf.bundle.min.js';
+  var pdf = { token: 0, state: 'idle', blob: null, file: null, name: '' };
+  var libPromise = null;
+
+  function loadLib(){
+    if (window.html2pdf) return Promise.resolve();
+    if (!libPromise){
+      libPromise = new Promise(function(resolve, reject){
+        var sc = document.createElement('script');
+        sc.src = PDF_LIB; sc.onload = resolve;
+        sc.onerror = function(){ libPromise = null; reject(new Error('PDF library did not load')); };
+        document.head.appendChild(sc);
+      });
+    }
+    return libPromise;
+  }
+
+  function canShareFiles(){
+    try {
+      return !!(navigator.share && navigator.canShare && navigator.canShare({ files: [ new File(['x'], 'test.pdf', { type: 'application/pdf' }) ] }));
+    } catch (e) { return false; }
+  }
+
+  function pdfName(){
+    var n = String(A.name || 'Client').trim().replace(/[^A-Za-z0-9\u0A80-\u0AFF ]+/g, '').replace(/\s+/g, '-').slice(0, 40);
+    return 'Antariksh-Requirement-' + (n || 'Client') + '.pdf';
+  }
+
+  function reportEl(){
+    var d = new Date().toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+    var h = '<div class="rep">' +
+      '<div class="rep-head"><div><div class="rep-title">CLIENT REQUIREMENT FORM</div>' +
+      '<div class="rep-sub">' + esc(A.name || '') + ' &nbsp;·&nbsp; ' + esc(A.phone || '') + ' &nbsp;·&nbsp; Filled on ' + d + '</div></div>' +
+      '<img src="img/logo.png" alt="Antariksh Design Studio"></div>';
+    STEPS.forEach(function(s){
+      var rows = s.qs.filter(function(q){ return !q.group && visible(q) && answered(q); });
+      if (!rows.length) return;
+      var tr = rows.map(function(q){ return '<tr><td class="k">' + esc(q.en) + '</td><td>' + esc(fmt(q)).replace(/\n/g, '<br>') + '</td></tr>'; });
+      // the section title travels with its first row, so a title never sits alone at a page end
+      h += '<table class="rep-sec"><tbody class="keep"><tr><th colspan="2">' + esc(val(s.en).toUpperCase()) + '</th></tr>' + tr[0] + '</tbody>' +
+        (tr.length > 1 ? '<tbody>' + tr.slice(1).join('') + '</tbody>' : '') + '</table>';
+    });
+    h += '<p class="rep-note">Antariksh Design Studio · Architecture | Interior | Landscape | Product design<br>33/34, Sundaram Society, Nr. Raj Laxmi Residency, Causeway Road, Katargam, Surat – 395004</p></div>';
+    var box = document.createElement('div');
+    box.innerHTML = h;
+    return box.firstChild;
+  }
+
+  function makePdfBlob(){
+    var opt = {
+      margin: [12, 12, 16, 12],
+      filename: pdfName(),
+      image: { type: 'jpeg', quality: 0.92 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'], avoid: ['tr', '.keep'] }
+    };
+    return window.html2pdf().set(opt).from(reportEl()).toPdf().get('pdf').then(function(doc){
+      var n = doc.internal.getNumberOfPages();
+      for (var i = 1; i <= n; i++){
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(113, 113, 113);
+        doc.text('Antariksh Design Studio  |  +91 97373 47006  |  +91 76210 03444', 12, 289);
+        doc.text('Page ' + i + ' of ' + n, 198, 289, { align: 'right' });
+      }
+    }).outputPdf('blob');
+  }
+
+  function preparePdf(){
+    if (!(nameOK() && phoneOK())){ pdf.state = 'idle'; updateSend(); return; }
+    var t = ++pdf.token;
+    pdf.state = 'busy'; pdf.blob = null; pdf.file = null;
+    updateSend();
+    var fontsReady = (document.fonts && document.fonts.ready) ? document.fonts.ready : Promise.resolve();
+    Promise.all([loadLib(), fontsReady]).then(function(){ return makePdfBlob(); }).then(function(blob){
+      if (t !== pdf.token) return;
+      pdf.blob = blob; pdf.name = pdfName();
+      try { pdf.file = new File([blob], pdf.name, { type: 'application/pdf' }); } catch (e) { pdf.file = null; }
+      pdf.state = 'ready'; updateSend();
+    }).catch(function(){
+      if (t !== pdf.token) return;
+      pdf.state = 'error'; updateSend();
+    });
+  }
+
+  function updateSend(){
+    var btn = document.getElementById('sharepdf');
+    var hint = document.getElementById('pdfhint');
+    var dl = document.getElementById('dlpdf');
+    if (!btn) return;
+    var share = canShareFiles();
+    var ready = nameOK() && phoneOK();
+    btn.disabled = !(ready && (pdf.state === 'ready' || pdf.state === 'error'));
+    if (dl){ dl.disabled = pdf.state !== 'ready'; dl.hidden = !share; }
+    if (!ready){
+      btn.innerHTML = 'Send PDF to Antariksh on WhatsApp<small lang="gu">PDF સાથે WhatsApp પર મોકલો</small>';
+      hint.innerHTML = '';
+    } else if (pdf.state === 'busy'){
+      btn.innerHTML = 'Preparing PDF…<small lang="gu">PDF તૈયાર થાય છે…</small>';
+      hint.innerHTML = 'Making a PDF of your answers. This takes a few seconds. · <span class="g">તમારા જવાબોની PDF બને છે, થોડી સેકન્ડ લાગશે.</span>';
+    } else if (pdf.state === 'error'){
+      btn.innerHTML = 'Try making the PDF again<small lang="gu">PDF ફરી બનાવો</small>';
+      hint.innerHTML = 'The PDF could not be made. Tap to try again, or send your answers as a text message below. · <span class="g">PDF બની નહીં. ફરી ટેપ કરો, અથવા નીચેથી ફક્ત મેસેજ મોકલો.</span>';
+    } else if (share){
+      btn.innerHTML = 'Send PDF to Antariksh on WhatsApp<small lang="gu">PDF સાથે WhatsApp પર મોકલો</small>';
+      hint.innerHTML = 'Your answers go as a PDF with a short message. Choose <b>WhatsApp</b>, then the Antariksh chat (' + WA_SHOW + '), and press Send. · <span class="g">WhatsApp પસંદ કરો, પછી Antariksh ની ચેટ (' + WA_SHOW + ') પસંદ કરી Send દબાવો.</span>';
+    } else {
+      btn.innerHTML = 'Download PDF<small lang="gu">PDF ડાઉનલોડ કરો</small>';
+      hint.innerHTML = 'Save the PDF, then send it on WhatsApp to ' + WA_SHOW + ' (tap 📎 → Document). · <span class="g">PDF સેવ કરી ' + WA_SHOW + ' પર WhatsApp માં 📎 → Document થી મોકલો.</span>';
+    }
+  }
+
+  function shortText(){
+    var t = ['Antariksh Design Studio – client requirement form', 'Name: ' + (A.name || '').trim(), 'Mobile: ' + (A.phone || '').trim()];
+    if (A.siteType) t.push('Site: ' + A.siteType + (isFlat() && A.bhk ? ', ' + A.bhk : '') + (isBung() && A.floors ? ', ' + A.floors : ''));
+    if (A.area) t.push('Carpet area: ' + String(A.area).trim() + ' sq ft');
+    if (A.budget) t.push('Budget: ' + A.budget);
+    t.push('Full details are in the attached PDF.');
+    return t.join('\n');
+  }
+
+  function downloadPdf(){
+    if (!pdf.blob) return;
+    var url = URL.createObjectURL(pdf.blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = pdf.name;
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 5000);
+  }
+
+  function showAfter(kind){
+    var box = document.getElementById('after');
+    if (!box) return;
+    var msg = {
+      shared: '<b>Did WhatsApp open?</b> Pick the Antariksh chat (' + WA_SHOW + ') and press Send. You can also send site photos or the builder plan in the same chat.<span class="gu" lang="gu">Antariksh ની ચેટ પસંદ કરી Send દબાવો. સાઇટના ફોટા કે બિલ્ડરનો પ્લાન પણ એ જ ચેટમાં મોકલી શકો.</span>',
+      downloaded: '<b>The PDF is saved.</b> Open WhatsApp, go to the chat with ' + WA_SHOW + ', tap 📎 → Document, choose the PDF and press Send.<span class="gu" lang="gu">PDF સેવ થઈ ગઈ. WhatsApp માં ' + WA_SHOW + ' ની ચેટ ખોલી 📎 → Document થી PDF મોકલો.</span>',
+      text: '<b>Did WhatsApp open?</b> Press Send there to share your answers.<span class="gu" lang="gu">WhatsApp માં Send દબાવો.</span>'
+    }[kind];
+    box.innerHTML = msg;
+    box.hidden = false;
+  }
+
+  function sendPdf(){
+    if (pdf.state === 'error'){ preparePdf(); return; }
+    if (pdf.state !== 'ready') return;
+    if (canShareFiles() && pdf.file){
+      navigator.share({ files: [pdf.file], title: 'Antariksh – client requirement form', text: shortText() })
+        .then(function(){ showAfter('shared'); })
+        .catch(function(err){
+          if (err && err.name === 'AbortError') return;
+          downloadPdf(); showAfter('downloaded');
+        });
+    } else {
+      downloadPdf(); showAfter('downloaded');
+    }
+  }
+
   $view.addEventListener('click', function(e){
     var goBtn = e.target.closest('[data-go]');
     if (goBtn){ go(parseInt(goBtn.getAttribute('data-go'), 10)); return; }
@@ -488,24 +661,12 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
     }
 
     if (e.target.closest('#wa')){
-      var after = document.getElementById('after');
-      if (after) after.hidden = false;
+      showAfter('text');
       return;
     }
 
-    if (e.target.closest('#copy')){
-      var msg = buildMessage();
-      var box = document.getElementById('copybox');
-      var ta = document.getElementById('copytext');
-      var btn = document.getElementById('copy');
-      function fallback(){ if (box && ta){ ta.value = msg; box.hidden = false; ta.focus(); ta.select(); } }
-      try {
-        if (navigator.clipboard && navigator.clipboard.writeText){
-          navigator.clipboard.writeText(msg).then(function(){ btn.innerHTML = 'Copied · <span lang="gu">કોપી થઈ ગયું</span>'; }, fallback);
-        } else { fallback(); }
-      } catch (err) { fallback(); }
-      return;
-    }
+    if (e.target.closest('#sharepdf')){ sendPdf(); return; }
+    if (e.target.closest('#dlpdf')){ if (pdf.state === 'ready'){ downloadPdf(); showAfter('downloaded'); } return; }
 
     var clear = e.target.closest('#clear');
     if (clear){
@@ -524,7 +685,7 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
   $view.addEventListener('input', function(e){
     var t = e.target;
     var id = t.getAttribute && t.getAttribute('data-q');
-    if (!id || t.id === 'copytext') return;
+    if (!id) return;
     A[id] = t.value;
     save();
     refreshPillsAndErrors(id);
