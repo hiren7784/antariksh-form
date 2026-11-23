@@ -138,6 +138,12 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
 
 .btn:disabled{opacity:.55;cursor:default}
 .btn[hidden]{display:none}
+.resume{display:grid;gap:8px;background:var(--bg);border-radius:12px;padding:12px}
+.btn.share{width:100%;justify-content:flex-start;gap:12px;border-color:var(--wa);color:var(--wa);padding:8px 16px}
+.btn.share span{display:flex;flex-direction:column;align-items:flex-start;gap:1px}
+.btn.share small{color:var(--muted)}
+.wa-dot{width:28px;height:28px;border-radius:50%;background:var(--wa);flex:none;position:relative}
+.wa-dot::after{content:"";position:absolute;inset:8px;border:2px solid #fff;border-radius:50%;border-bottom-left-radius:2px}
 .row2 .btn{flex:1 1 160px}
 .rep{width:700px;background:#fff;color:#1A1A1A;font-family:var(--font-body);font-size:13px;line-height:1.4}
 .rep-head{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;padding-bottom:10px;border-bottom:2px solid #D19B17;margin-bottom:14px}
@@ -181,6 +187,10 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
   var WA_NUMBER = '917621003444';
   var WA_SHOW = '+91 76210 03444';
   var KEY = 'antariksh-client-form-v1';
+  var SITE_URL = 'https://hiren7784.github.io/antariksh-form/';
+  var SHARE_MSG = 'Namaste 🙏\nThank you for contacting Antariksh Design Studio. Please fill this short form about your home / office (about 5 minutes). At the end, tap "Send PDF to Antariksh on WhatsApp".\n\n' +
+    'નમસ્તે 🙏\nAntariksh Design Studio નો સંપર્ક કરવા બદલ આભાર. તમારા ઘર / ઓફિસ વિશે આ નાનું ફોર્મ ભરો (લગભગ 5 મિનિટ). છેલ્લે "PDF સાથે WhatsApp પર મોકલો" દબાવો.\n\n' + SITE_URL;
+  var resumeView = 1;
 
   var A = {};
   var view = 0;
@@ -302,7 +312,7 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
   function load(){
     try {
       var raw = localStorage.getItem(KEY);
-      if (raw){ var d = JSON.parse(raw); if (d && typeof d === 'object'){ A = d.A || {}; view = Math.min(Math.max(d.view|0, 0), LAST); } }
+      if (raw){ var d = JSON.parse(raw); if (d && typeof d === 'object'){ A = d.A || {}; resumeView = Math.min(Math.max(d.view|0, 1), LAST); } }
     } catch (e) { storageOK = false; }
   }
 
@@ -356,7 +366,12 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
   }
 
   function welcomeHTML(){
-    var resume = Object.keys(A).length ? '<p class="hint">Your earlier answers are still here. · <span class="g">તમારા અગાઉના જવાબ સચવાયેલા છે.</span></p>' : '';
+    var has = Object.keys(A).some(function(k){ var v = A[k]; return Array.isArray(v) ? v.length : !!(v && String(v).trim()); });
+    var resume = has ? '<div class="resume"><p class="hint">You have a half-filled form on this phone. · <span class="g">આ ફોનમાં અધૂરું ભરેલું ફોર્મ છે.</span></p>' +
+      '<div class="row2"><button type="button" class="btn primary stack" data-go="' + resumeView + '">Continue my form<small lang="gu">ફોર્મ આગળ ભરો</small></button>' +
+      '<button type="button" class="btn ghost stack" id="newform">Start a new form<small lang="gu">નવું ફોર્મ શરૂ કરો</small></button></div></div>' : '';
+    var share = '<a class="btn ghost share" href="https://wa.me/?text=' + encodeURIComponent(SHARE_MSG) + '" target="_blank" rel="noopener">' +
+      '<span class="wa-dot" aria-hidden="true"></span><span>Share this form on WhatsApp<small lang="gu">આ ફોર્મ WhatsApp પર શેર કરો</small></span></a>';
     return '<section class="hero">' +
       '<p class="eyebrow">Client requirement form · Surat</p>' +
       '<h1>Tell us about your space<span class="gu" lang="gu">તમારી જગ્યા વિશે અમને જણાવો</span></h1>' +
@@ -366,7 +381,7 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
         '<li><span class="num">TAP</span>Mostly tap to choose<span class="gu" lang="gu">મોટાભાગે ફક્ત ટેપ કરો</span></li>' +
         '<li><span class="num">SKIP</span>Leave out what you are unsure of<span class="gu" lang="gu">ખબર ન હોય તે છોડી દો</span></li>' +
         '<li><span class="num">SEND</span>Send to us on WhatsApp<span class="gu" lang="gu">છેલ્લે WhatsApp પર મોકલો</span></li>' +
-      '</ul>' + resume +
+      '</ul>' + resume + share +
     '</section>' + footHTML();
   }
 
@@ -667,6 +682,14 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
 
     if (e.target.closest('#sharepdf')){ sendPdf(); return; }
     if (e.target.closest('#dlpdf')){ if (pdf.state === 'ready'){ downloadPdf(); showAfter('downloaded'); } return; }
+
+    if (e.target.closest('#newform')){
+      A = {}; showErrors = false; resumeView = 1;
+      try { localStorage.removeItem(KEY); } catch (err) {}
+      $saved.textContent = '';
+      render(true);
+      return;
+    }
 
     var clear = e.target.closest('#clear');
     if (clear){
