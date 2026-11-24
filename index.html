@@ -138,6 +138,10 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
 
 .btn:disabled{opacity:.55;cursor:default}
 .btn[hidden]{display:none}
+.btn.submit{background:var(--gold);border-color:var(--gold);color:var(--ink);width:100%;min-height:60px;font-size:18px;flex-direction:column;gap:2px;padding:8px 16px}
+.refbox{background:var(--gold-soft);border-radius:10px;padding:10px 12px;font-variant-numeric:tabular-nums}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+.warn[hidden]{display:none}
 .resume{display:grid;gap:8px;background:var(--bg);border-radius:12px;padding:12px}
 .btn.share{width:100%;justify-content:flex-start;gap:12px;border-color:var(--wa);color:var(--wa);padding:8px 16px}
 .btn.share span{display:flex;flex-direction:column;align-items:flex-start;gap:1px}
@@ -186,6 +190,11 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
 (function(){
   var WA_NUMBER = '917621003444';
   var WA_SHOW = '+91 76210 03444';
+  // Google Apps Script web app that saves each form to the studio's Google Drive.
+  // Empty = answers are sent on WhatsApp instead.
+  var DRIVE_URL = '';
+  var doneInfo = null;   // set after a successful Drive submit
+  var sending = false;
   var KEY = 'antariksh-client-form-v1';
   var SITE_URL = 'https://hiren7784.github.io/antariksh-form/';
   var SHARE_MSG = 'Namaste 🙏\nThank you for contacting Antariksh Design Studio. Please fill this short form about your home / office (about 5 minutes). At the end, tap "Send PDF to Antariksh on WhatsApp".\n\n' +
@@ -412,7 +421,15 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
     if (!ready){
       h += '<div class="warn"><p><b>Please add your name and mobile number first.</b><span class="gu" lang="gu">પહેલાં તમારું નામ અને મોબાઇલ નંબર લખો.</span></p><div><button type="button" class="btn ghost" data-go="1">Add name & number</button></div></div>';
     }
-    h += '<div class="send">' +
+    if (DRIVE_URL){
+      h += '<div class="send">' +
+        '<button type="button" class="btn submit" id="submitform" disabled>Preparing…<small lang="gu">તૈયાર થાય છે…</small></button>' +
+        '<p class="hint" id="pdfhint"></p>' +
+        '<div class="warn" id="senderr" hidden><p><b>Your form could not be sent.</b> Check the internet and tap Submit again, or send your answers on WhatsApp.<span class="gu" lang="gu">ફોર્મ મોકલાયું નહીં. ઇન્ટરનેટ તપાસી ફરી Submit દબાવો, અથવા WhatsApp પર મોકલો.</span></p>' +
+        '<div><a class="btn ghost stack" id="wa" target="_blank" rel="noopener" href="' + (ready ? 'https://wa.me/' + WA_NUMBER + '?text=' + encodeURIComponent(buildMessage()) : '#') + '">Send on WhatsApp instead<small lang="gu">WhatsApp પર મોકલો</small></a></div></div>' +
+        '<input type="text" id="website" name="website" tabindex="-1" autocomplete="off" aria-hidden="true" class="hp">' +
+      '</div>';
+    } else h += '<div class="send">' +
       '<button type="button" class="btn wa" id="sharepdf" disabled>Preparing PDF…<small lang="gu">PDF તૈયાર થાય છે…</small></button>' +
       '<p class="hint" id="pdfhint"></p>' +
       '<div class="after" id="after" hidden></div>' +
@@ -437,6 +454,18 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
     return h + '</div>' + footHTML();
   }
 
+  function thanksHTML(){
+    var d = doneInfo || {};
+    return '<section class="hero">' +
+      '<p class="eyebrow">Form received · ફોર્મ મળી ગયું</p>' +
+      '<h1>Thank you' + (d.name ? ', ' + esc(d.name.split(' ')[0]) : '') + '!<span class="gu" lang="gu">આભાર!</span></h1>' +
+      '<p>Your details have reached Antariksh Design Studio. We will call you soon' + (d.phone ? ' on ' + esc(d.phone) : '') + '.<span class="gu" lang="gu">તમારી વિગતો Antariksh Design Studio ને મળી ગઈ છે. અમે ટૂંક સમયમાં તમને ફોન કરીશું.</span></p>' +
+      '<p class="refbox">Reference no. <b>' + esc(d.ref || '') + '</b></p>' +
+      '<p class="hint">Your answers have been cleared from this phone. For a quick question, WhatsApp us on ' + WA_SHOW + '. · <span class="g">તમારા જવાબ આ ફોનમાંથી દૂર થઈ ગયા છે. કોઈ પ્રશ્ન હોય તો ' + WA_SHOW + ' પર WhatsApp કરો.</span></p>' +
+      '<div><button type="button" class="btn ghost stack" data-go="0">Back to main page<small lang="gu">મુખ્ય પેજ પર જાઓ</small></button></div>' +
+    '</section>' + footHTML();
+  }
+
   function footHTML(){
     return '<p class="foot">Antariksh Design Studio · Architecture | Interior | Landscape | Product design<br>33/34, Sundaram Society, Nr. Raj Laxmi Residency, Causeway Road, Katargam, Surat – 395004<br>+91 97373 47006 · +91 76210 03444</p>';
   }
@@ -456,6 +485,14 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
   }
 
   function render(scrollTop){
+    if (doneInfo){
+      $view.innerHTML = thanksHTML();
+      renderPills();
+      $progress.style.width = '100%';
+      $back.hidden = true; $next.hidden = true;
+      if (scrollTop) window.scrollTo(0, 0);
+      return;
+    }
     if (view === 0) $view.innerHTML = welcomeHTML();
     else if (view === LAST){ $view.innerHTML = reviewHTML(); preparePdf(); }
     else $view.innerHTML = stepHTML(view - 1);
@@ -470,6 +507,7 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
   }
 
   function go(n){
+    if (doneInfo){ doneInfo = null; view = 0; render(true); return; }
     if (n > 1 && view === 1 && (!nameOK() || !phoneOK())){
       showErrors = true; render(false);
       var first = document.getElementById(!nameOK() ? 'f-name' : 'f-phone');
@@ -579,6 +617,7 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
   }
 
   function updateSend(){
+    if (DRIVE_URL){ updateSubmit(); return; }
     var btn = document.getElementById('sharepdf');
     var hint = document.getElementById('pdfhint');
     var dl = document.getElementById('dlpdf');
@@ -635,6 +674,66 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
     box.hidden = false;
   }
 
+  /* ---------- Drive mode: submit to the studio's Google Drive ---------- */
+  function updateSubmit(){
+    var btn = document.getElementById('submitform');
+    var hint = document.getElementById('pdfhint');
+    if (!btn) return;
+    var ready = nameOK() && phoneOK();
+    btn.disabled = !ready || sending || pdf.state === 'busy';
+    if (sending){
+      btn.innerHTML = 'Sending…<small lang="gu">મોકલાય છે…</small>';
+    } else if (ready && pdf.state === 'busy'){
+      btn.innerHTML = 'Preparing…<small lang="gu">તૈયાર થાય છે…</small>';
+    } else {
+      btn.innerHTML = 'Submit to Antariksh<small lang="gu">Antariksh ને મોકલો</small>';
+    }
+    hint.innerHTML = ready ? 'Your answers and a PDF go straight to Antariksh Design Studio. Only the studio can see them. · <span class="g">તમારા જવાબ અને PDF સીધા Antariksh Design Studio પાસે જશે. ફક્ત સ્ટુડિયો જ જોઈ શકશે.</span>' : '';
+  }
+
+  function blobToBase64(blob){
+    return new Promise(function(resolve, reject){
+      var r = new FileReader();
+      r.onload = function(){ var s = String(r.result || ''); resolve(s.slice(s.indexOf(',') + 1)); };
+      r.onerror = function(){ reject(r.error); };
+      r.readAsDataURL(blob);
+    });
+  }
+
+  function flatAnswers(){
+    var out = {};
+    STEPS.forEach(function(s){ s.qs.forEach(function(q){ if (!q.group && visible(q) && answered(q)) out[q.id] = fmt(q); }); });
+    return out;
+  }
+
+  function submitForm(){
+    if (sending || !(nameOK() && phoneOK()) || pdf.state === 'busy') return;
+    sending = true;
+    var err = document.getElementById('senderr'); if (err) err.hidden = true;
+    updateSubmit();
+    var hp = document.getElementById('website');
+    var who = { name: String(A.name || '').trim(), phone: String(A.phone || '').trim() };
+    (pdf.blob ? blobToBase64(pdf.blob) : Promise.resolve('')).then(function(b64){
+      return fetch(DRIVE_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ form: 'antariksh-client-v1', answers: flatAnswers(), text: buildMessage(), pdf: b64, fileName: pdf.name, website: hp ? hp.value : '' })
+      });
+    }).then(function(r){ return r.json(); }).then(function(res){
+      if (!res || !res.ok) throw new Error((res && res.error) || 'Not saved');
+      sending = false;
+      doneInfo = { ref: res.ref, name: who.name, phone: who.phone };
+      A = {}; showErrors = false; resumeView = 1; view = 0; pdf.token++; pdf.state = 'idle'; pdf.blob = null; pdf.file = null;
+      try { localStorage.removeItem(KEY); } catch (e) {}
+      $saved.textContent = '';
+      render(true);
+    }).catch(function(){
+      sending = false;
+      var box = document.getElementById('senderr'); if (box) box.hidden = false;
+      updateSubmit();
+    });
+  }
+
   function sendPdf(){
     if (pdf.state === 'error'){ preparePdf(); return; }
     if (pdf.state !== 'ready') return;
@@ -681,6 +780,7 @@ input:focus,textarea:focus{outline:none;border-color:var(--gold);box-shadow:0 0 
     }
 
     if (e.target.closest('#sharepdf')){ sendPdf(); return; }
+    if (e.target.closest('#submitform')){ submitForm(); return; }
     if (e.target.closest('#dlpdf')){ if (pdf.state === 'ready'){ downloadPdf(); showAfter('downloaded'); } return; }
 
     if (e.target.closest('#newform')){
